@@ -63,6 +63,15 @@ var rootCmd = &cobra.Command{
 
 		//Slice with the ASCII representation for a frame. Each frame is stored as a string with escape sequences for color and newlines
 		asciiList := make([]string, frameCount)
+
+		var charSet []string
+		//eventually add flag to swap between these
+		if true{
+			charSet = strings.Split(" .:=+*#%@", "")
+		}else{
+			charSet = strings.Split("░▒▓█", "")
+		}
+
 		//For each pixel in each frame get the relative luminance in a range of 0-255, select a char based on that, and set an ANSI color
 		for frameIndex, frame := range frames{
 			var ansiBuilder strings.Builder
@@ -75,15 +84,8 @@ var rootCmd = &cobra.Command{
 					relativeLuminance := (0.2126 * float64(red)) + (0.715 * float64(green)) + (0.0722 * float64(blue))
 					ansiBuilder.WriteString("\x1b[38;2;" + strconv.FormatUint(uint64(red), 10) + ";" + strconv.FormatUint(uint64(green), 10) + ";" + strconv.FormatUint(uint64(blue), 10) + "m") 
 					
-					var charSet []string
-					//eventually add flag to swap between these
-					if true{
-						charSet = []string{".", ",", ":","-", "=", "+", "*", "#", "%", "@"}
-					}else{
-						charSet = []string{"░", "▒", "▓", "█"}
-					}
 					charIndex := int(math.Round(relativeLuminance / (255 / float64(len(charSet) - 1)))) 
-					ansiBuilder.WriteString(charSet[charIndex] + charSet[charIndex ]) 
+					ansiBuilder.WriteString(charSet[charIndex] + charSet[charIndex]) 
 					
 				}
 				if y == newHeight - 1{
