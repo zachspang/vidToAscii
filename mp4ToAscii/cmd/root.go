@@ -42,7 +42,7 @@ var rootCmd = &cobra.Command{
 		}
 		// fmt.Println("TW", termWidth, "TH", termHeight)
 		// fmt.Println("NW", newWidth, "NH", newHeight)
-		var frames []image.Image
+		frames := make([]image.Image, frameCount) 
 		//Read all frames, decode them from jpeg, then append them to the slice frames
 		for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 			frame, err := jpeg.Decode(ReadFrameAsJpeg(filename, frameIndex))
@@ -50,7 +50,7 @@ var rootCmd = &cobra.Command{
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
-			frames = append(frames, frame)
+			frames[frameIndex] = frame
 		}
 
 		//For each frame make a blank image of the new size and then draw over it
