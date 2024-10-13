@@ -12,5 +12,6 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/u2takey/ffmpeg-go v0.5.0 // indirect
 	github.com/u2takey/go-utils v0.3.1 // indirect
+	golang.org/x/image v0.21.0 // indirect
 	golang.org/x/sys v0.26.0 // indirect
 )

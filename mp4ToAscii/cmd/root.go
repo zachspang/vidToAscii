@@ -10,6 +10,8 @@ import (
 	"os"
 	"strconv"
 
+	"golang.org/x/image/draw"
+
 	tsize "github.com/kopoli/go-terminal-size"
 	"github.com/spf13/cobra"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
@@ -28,10 +30,10 @@ var rootCmd = &cobra.Command{
 		fmt.Println("Current terminal size is", tSize.Width, "by", tSize.Height)
 
 		//Get the size and total frames of the input video
-		_, _, frameCount := GetVideoInfo(filename)
+		originalWidth, originalHeight, frameCount := GetVideoInfo(filename)
 
 		var frames []image.Image
-		//Read all frames, decode them into jpeg, then append them to the slice frames
+		//Read all frames, decode them from jpeg, then append them to the slice frames
 		for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 			frame, err := jpeg.Decode(ReadFrameAsJpeg(filename, frameIndex))
 			if err != nil {
@@ -41,10 +43,20 @@ var rootCmd = &cobra.Command{
 			frames = append(frames, frame)
 		}
 
+		//For each frame make a blank image of the new size and then draw over it
+		for frameIndex, frame := range frames{
+			resizedImage:= image.NewRGBA(image.Rect(0, 0, originalWidth/10, originalHeight/10))
+			//Add flag for different quality options https://pkg.go.dev/golang.org/x/image/draw#pkg-variables
+			draw.CatmullRom.Scale(resizedImage, resizedImage.Rect, frame, frame.Bounds(), draw.Over, nil)
+			frames[frameIndex] = resizedImage
+		}
+		
 		//DELETE LATER. Save the first frame for testing purposes
 			img, _ := jpeg.Decode(ReadFrameAsJpeg(filename, 0))
 			file, _ := os.Create("..\\output.jpeg")
 			_ = jpeg.Encode(file, img, &jpeg.Options{Quality: 100})
+			file, _ = os.Create("..\\output2.jpeg")
+			_ = jpeg.Encode(file, frames[0], &jpeg.Options{Quality: 100})
 	},
 }
   
