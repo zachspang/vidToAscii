@@ -7,42 +7,40 @@ import (
 	"image"
 	"image/jpeg"
 	"io"
+	"math"
 	"os"
 	"strconv"
+	"time"
 
 	"golang.org/x/image/draw"
+	"golang.org/x/term"
 
-	tsize "github.com/kopoli/go-terminal-size"
 	"github.com/spf13/cobra"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
 var rootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
-		filename := "..\\input.mp4"
+		filename := "..\\inputLong.mp4"
+		
 		//Get the size of the terminal
-		var tSize tsize.Size
-		tSize, err := tsize.GetSize()
+		termWidth, termHeight, err := term.GetSize(int(os.Stdout.Fd()))
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-
 		//Get the size and total frames of the input video
-		originalWidth, originalHeight, frameCount := GetVideoInfo(filename)
+		originalWidth, originalHeight, frameCount, duration := GetVideoInfo(filename)
 
 		//Set the new width and height based on the terminal size
-		newHeight := 0
-		newWidth := 0
-		
-		if tSize.Width / 2 > tSize.Height{
-			newHeight = tSize.Height
+		newWidth := termWidth / 2
+		newHeight := (int((float32(newWidth) / float32(originalWidth)) * float32(originalHeight)))
+		if newHeight > termHeight{
+			newHeight = termHeight
 			newWidth = (int((float32(newHeight) / float32(originalHeight)) * float32(originalWidth)))
-		} else{
-			newWidth = tSize.Width / 2
-			newHeight = (int((float32(newWidth) / float32(originalWidth)) * float32(originalHeight)))
 		}
-		
+		// fmt.Println("TW", termWidth, "TH", termHeight)
+		// fmt.Println("NW", newWidth, "NH", newHeight)
 		var frames []image.Image
 		//Read all frames, decode them from jpeg, then append them to the slice frames
 		for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
@@ -62,7 +60,7 @@ var rootCmd = &cobra.Command{
 			frames[frameIndex] = resizedImage
 		}
 
-		//Slice with the ASCII representation for a pixel. Each frame is stored as a string with escape sequences for color and newlines
+		//Slice with the ASCII representation for a frame. Each frame is stored as a string with escape sequences for color and newlines
 		var asciiList[]string
 		//For each pixel in each frame get the relative luminance in a range of 0-255, select a char based on that, and set an ANSI color
 		for frameIndex, frame := range frames{
@@ -73,23 +71,45 @@ var rootCmd = &cobra.Command{
 					red := uint8(R>>8)
 					green := uint8(G>>8)
 					blue := uint8(B>>8)
-					//relativeLuminance := (0.2126 * float32(R)) + (0.715 * float32(G)) + (0.0722 * float32(B))
+					relativeLuminance := (0.2126 * float64(red)) + (0.715 * float64(green)) + (0.0722 * float64(blue))
 					ansi := "\x1b[38;2;" + strconv.FormatUint(uint64(red), 10) + ";" + strconv.FormatUint(uint64(green), 10) + ";" + strconv.FormatUint(uint64(blue), 10) + "m" 
-					ansi += "██"
+					
+					var charSet []string
+					//eventually add flag to swap between these
+					if true{
+						charSet = []string{".", ",", ":","-", "=", "+", "*", "#", "%", "@"}
+					}else{
+						charSet = []string{"░", "▒", "▓", "█"}
+					}
+					charIndex := int(math.Round(relativeLuminance / (255 / float64(len(charSet) - 1)))) 
+					ansi += charSet[charIndex] + charSet[charIndex ]
 					asciiList[frameIndex] += ansi
 				}
-				asciiList[frameIndex] += "\033[0m\n"
+				if y == newHeight - 1{
+					asciiList[frameIndex] += "\033[0m"
+				}else{
+					asciiList[frameIndex] += "\033[0m\n"
+				}
 			}
 		}
+
+		fmt.Printf("\033[2J\033[H")
+		frametime := duration / float32(frameCount)
+		for _, frame := range asciiList{
+			fmt.Print(frame)
+			time.Sleep(time.Duration(frametime * 1000) * time.Millisecond)
+			fmt.Printf("\033[J\033[H")
+		}
+		fmt.Printf("\033[J")
 		//Print the frame
-		fmt.Println(asciiList[0])
-		fmt.Println("\033[0m")
-		//DELETE LATER. Save the first frame for testing purposes
-			img, _ := jpeg.Decode(ReadFrameAsJpeg(filename, 0))
-			file, _ := os.Create("..\\output.jpeg")
-			_ = jpeg.Encode(file, img, &jpeg.Options{Quality: 100})
-			file, _ = os.Create("..\\output2.jpeg")
-			_ = jpeg.Encode(file, frames[0], &jpeg.Options{Quality: 100})
+		// fmt.Println(asciiList[0])
+		// fmt.Println("\033[0m")
+		// //DELETE LATER. Save the first frame for testing purposes
+		// 	img, _ := jpeg.Decode(ReadFrameAsJpeg(filename, 0))
+		// 	file, _ := os.Create("..\\output.jpeg")
+		// 	_ = jpeg.Encode(file, img, &jpeg.Options{Quality: 100})
+		// 	file, _ = os.Create("..\\output2.jpeg")
+		// 	_ = jpeg.Encode(file, frames[0], &jpeg.Options{Quality: 100})
 	},
 }
   
@@ -115,8 +135,8 @@ func ReadFrameAsJpeg(inFileName string, frameNum int) io.Reader {
 	return buf
 }
 
-//Return width, height, and total frames of video
-func GetVideoInfo(inFileName string) (int, int, int) {
+//Return width, height, total frames, and duration of video
+func GetVideoInfo(inFileName string) (int, int, int, float32) {
 	data, err := ffmpeg.Probe(inFileName)
 	if err != nil {
 		panic(err)
@@ -127,6 +147,7 @@ func GetVideoInfo(inFileName string) (int, int, int) {
 			Width     int
 			Height    int
 			Frames string `json:"nb_frames"`
+			Duration string `json:"duration"`
 		} `json:"streams"`
 	}
 	vInfo := &VideoInfo{}
@@ -139,5 +160,9 @@ func GetVideoInfo(inFileName string) (int, int, int) {
 	if err != nil {
 		panic(err)
 	}
-	return vInfo.Streams[0].Width, vInfo.Streams[0].Height, frames
+	duration,err := strconv.ParseFloat(vInfo.Streams[0].Duration,32)
+	if err != nil {
+		panic(err)
+	}
+	return vInfo.Streams[0].Width, vInfo.Streams[0].Height, frames, float32(duration)
 }

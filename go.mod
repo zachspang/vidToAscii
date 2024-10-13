@@ -14,4 +14,5 @@ require (
 	github.com/u2takey/go-utils v0.3.1 // indirect
 	golang.org/x/image v0.21.0 // indirect
 	golang.org/x/sys v0.26.0 // indirect
+	golang.org/x/term v0.25.0 // indirect
 )
