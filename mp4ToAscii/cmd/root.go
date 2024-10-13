@@ -41,16 +41,16 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 	},
-  }
+}
   
-  func Execute() {
+func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 	  fmt.Fprintln(os.Stderr, err)
 	  os.Exit(1)
 	}
-  }
+}
 
-  func ReadFrameAsJpeg(inFileName string, frameNum int) io.Reader {
+func ReadFrameAsJpeg(inFileName string, frameNum int) io.Reader {
 	buf := bytes.NewBuffer(nil)
 	err := ffmpeg.Input(inFileName).
 		Filter("select", ffmpeg.Args{fmt.Sprintf("gte(n,%d)", frameNum)}).
