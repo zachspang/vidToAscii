@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/image/draw"
@@ -66,13 +67,14 @@ var rootCmd = &cobra.Command{
 		for frameIndex, frame := range frames{
 			asciiList = append(asciiList, "")
 			for y := range newHeight{
+				var ansiBuilder strings.Builder
 				for x := range newWidth{
 					R,G,B,_ := frame.At(x,y).RGBA()
 					red := uint8(R>>8)
 					green := uint8(G>>8)
 					blue := uint8(B>>8)
 					relativeLuminance := (0.2126 * float64(red)) + (0.715 * float64(green)) + (0.0722 * float64(blue))
-					ansi := "\x1b[38;2;" + strconv.FormatUint(uint64(red), 10) + ";" + strconv.FormatUint(uint64(green), 10) + ";" + strconv.FormatUint(uint64(blue), 10) + "m" 
+					ansiBuilder.WriteString("\x1b[38;2;" + strconv.FormatUint(uint64(red), 10) + ";" + strconv.FormatUint(uint64(green), 10) + ";" + strconv.FormatUint(uint64(blue), 10) + "m") 
 					
 					var charSet []string
 					//eventually add flag to swap between these
@@ -82,14 +84,16 @@ var rootCmd = &cobra.Command{
 						charSet = []string{"░", "▒", "▓", "█"}
 					}
 					charIndex := int(math.Round(relativeLuminance / (255 / float64(len(charSet) - 1)))) 
-					ansi += charSet[charIndex] + charSet[charIndex ]
-					asciiList[frameIndex] += ansi
+					ansiBuilder.WriteString(charSet[charIndex] + charSet[charIndex ]) 
+					
 				}
+				
 				if y == newHeight - 1{
-					asciiList[frameIndex] += "\033[0m"
+					ansiBuilder.WriteString("\033[0m")
 				}else{
-					asciiList[frameIndex] += "\033[0m\n"
+					ansiBuilder.WriteString("\033[0m\n")
 				}
+				asciiList[frameIndex] += ansiBuilder.String()
 			}
 		}
 
