@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"image"
 	"image/jpeg"
-	"io"
 	"math"
 	"os"
 	"strconv"
@@ -22,7 +21,7 @@ import (
 
 var rootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
-		filename := "..\\inputLong.mp4"
+		filename := "..\\inputComplexShort.mp4"
 		
 		//Get the size of the terminal
 		termWidth, termHeight, err := term.GetSize(int(os.Stdout.Fd()))
@@ -43,14 +42,21 @@ var rootCmd = &cobra.Command{
 		// fmt.Println("TW", termWidth, "TH", termHeight)
 		// fmt.Println("NW", newWidth, "NH", newHeight)
 		frames := make([]image.Image, frameCount) 
+		reader := bytes.NewBuffer(nil)
 		//Read all frames, decode them from jpeg, then append them to the slice frames
 		for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
-			frame, err := jpeg.Decode(ReadFrameAsJpeg(filename, frameIndex))
+			testStart := time.Now()
+			ReadFrameAsJpeg(filename, frameIndex, reader)
+			readTime := time.Since(testStart)
+
+			frame, err := jpeg.Decode(reader)
+			
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
 			frames[frameIndex] = frame
+			fmt.Print("\033[J\033[HDecoding ", frameIndex, "/", frameCount, " read timer ", readTime)
 		}
 
 		//For each frame make a blank image of the new size and then draw over it
@@ -59,6 +65,7 @@ var rootCmd = &cobra.Command{
 			//Add flag for different quality options https://pkg.go.dev/golang.org/x/image/draw#pkg-variables
 			draw.CatmullRom.Scale(resizedImage, resizedImage.Rect, frame, frame.Bounds(), draw.Over, nil)
 			frames[frameIndex] = resizedImage
+			fmt.Print("\033[J\033[HScaling", frameIndex, "/", frameCount)
 		}
 
 		//Slice with the ASCII representation for a frame. Each frame is stored as a string with escape sequences for color and newlines
@@ -96,6 +103,7 @@ var rootCmd = &cobra.Command{
 				
 			}
 			asciiList[frameIndex] = ansiBuilder.String()
+			fmt.Print("\033[J\033[HPixels", frameIndex, "/", frameCount)
 		}
 
 		fmt.Printf("\033[2J\033[H")
@@ -140,18 +148,16 @@ func Execute() {
 }
 
 //Return an io.Reader containing frame# frameNum
-func ReadFrameAsJpeg(inFileName string, frameNum int) io.Reader {
-	buf := bytes.NewBuffer(nil)
+func ReadFrameAsJpeg(inFileName string, frameNum int, reader *bytes.Buffer) {
 	err := ffmpeg.Input(inFileName).
 		Filter("select", ffmpeg.Args{fmt.Sprintf("gte(n,%d)", frameNum)}).
 		Output("pipe:", ffmpeg.KwArgs{"loglevel":"quiet", "vframes": 1, "format": "image2", "vcodec": "mjpeg"}).
-		WithOutput(buf).
+		WithOutput(reader, os.Stdout).
 		Silent(true).
 		Run()
 	if err != nil {
 		panic(err)
 	}
-	return buf
 }
 
 //Return width, height, total frames, and duration of video
@@ -167,6 +173,7 @@ func GetVideoInfo(inFileName string) (int, int, int, float32) {
 			Height    int
 			Frames string `json:"nb_frames"`
 			Duration string `json:"duration"`
+			Framerate string `json:"r_frame_rate"`
 		} `json:"streams"`
 	}
 	vInfo := &VideoInfo{}
@@ -175,13 +182,19 @@ func GetVideoInfo(inFileName string) (int, int, int, float32) {
 		panic(err)
 	}
 
-	frames,err := strconv.Atoi(vInfo.Streams[0].Frames)
-	if err != nil {
-		panic(err)
-	}
 	duration,err := strconv.ParseFloat(vInfo.Streams[0].Duration,32)
 	if err != nil {
 		panic(err)
 	}
+
+	frames,err := strconv.Atoi(vInfo.Streams[0].Frames)
+	if err != nil {
+		framerate,err := strconv.ParseFloat(strings.Split(vInfo.Streams[0].Framerate, "/")[0],32)
+		if err != nil {
+			panic(err)
+		}
+		frames = int(framerate * duration)
+	}
+	
 	return vInfo.Streams[0].Width, vInfo.Streams[0].Height, frames, float32(duration)
 }
