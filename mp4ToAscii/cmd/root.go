@@ -91,7 +91,7 @@ var rootCmd = &cobra.Command{
 				if y == newHeight - 1{
 					ansiBuilder.WriteString("\033[0m")
 				}else{
-					ansiBuilder.WriteString("\033[0m\n")
+					ansiBuilder.WriteString("\n")
 				}
 				
 			}
@@ -99,13 +99,27 @@ var rootCmd = &cobra.Command{
 		}
 
 		fmt.Printf("\033[2J\033[H")
-		frametime := duration / float32(frameCount)
-		for _, frame := range asciiList{
-			fmt.Print(frame)
-			time.Sleep(time.Duration(frametime * 1000) * time.Millisecond)
-			fmt.Printf("\033[J\033[H")
+		frametime := time.Duration((duration / float32(frameCount))* 1000)  * time.Millisecond
+		totalDroppedFrames := 0
+		dropFrame := false
+		startTime := time.Now()
+		//This loop will print one frame then sleep until the next frame is meant to be shown
+		//If it can't keep up it will drop the next frame
+		for frameIndex, frame := range asciiList{
+			if dropFrame{
+				dropFrame = false
+				totalDroppedFrames++
+				continue
+			}
+			expectedTime := time.Duration((frameIndex + 1) * int(frametime))
+			print("\033[H",frame)
+			if expectedTime - time.Since(startTime) < 0{
+				dropFrame = true
+			}
+			time.Sleep(expectedTime - time.Since(startTime))
 		}
 		fmt.Printf("\033[J")
+		print("\nTotal Dropped Frames ", totalDroppedFrames)
 		//Print the frame
 		// fmt.Println(asciiList[0])
 		// fmt.Println("\033[0m")
