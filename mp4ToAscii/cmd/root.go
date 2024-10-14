@@ -21,7 +21,7 @@ import (
 
 var rootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
-		filename := "..\\inputComplexShort.mp4"
+		filename := "..\\inputComplex.mp4"
 		
 		//Get the size of the terminal
 		termWidth, termHeight, err := term.GetSize(int(os.Stdout.Fd()))
@@ -42,30 +42,31 @@ var rootCmd = &cobra.Command{
 		// fmt.Println("TW", termWidth, "TH", termHeight)
 		// fmt.Println("NW", newWidth, "NH", newHeight)
 		frames := make([]image.Image, frameCount) 
-		reader := bytes.NewBuffer(nil)
-		//Read all frames, decode them from jpeg, then append them to the slice frames
-		for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
-			testStart := time.Now()
-			ReadFrameAsJpeg(filename, frameIndex, reader)
-			readTime := time.Since(testStart)
 
-			frame, err := jpeg.Decode(reader)
-			
+		//Read all frames as a single byte string
+		reader := bytes.NewBuffer(nil)
+		ReadFramesAsJpeg(filename, frameCount, reader)
+		//All jpegs end in an EOI marker, 0xff 0xd9. Split the byte string into seperate byte strings for each frame
+		framesAsBytes := bytes.SplitAfter(reader.Bytes(), []byte{0xff, 0xd9})
+		
+		//Decode each frame's byte string into an image.Image
+		for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
+			frame, err := jpeg.Decode(bytes.NewReader(framesAsBytes[frameIndex]))
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
 			frames[frameIndex] = frame
-			fmt.Print("\033[J\033[HDecoding ", frameIndex, "/", frameCount, " read timer ", readTime)
+			fmt.Print("\033[J\033[HDecoding ", frameIndex, "/", frameCount)
 		}
 
 		//For each frame make a blank image of the new size and then draw over it
 		for frameIndex, frame := range frames{
 			resizedImage:= image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
 			//Add flag for different quality options https://pkg.go.dev/golang.org/x/image/draw#pkg-variables
-			draw.CatmullRom.Scale(resizedImage, resizedImage.Rect, frame, frame.Bounds(), draw.Over, nil)
+			draw.BiLinear.Scale(resizedImage, resizedImage.Rect, frame, frame.Bounds(), draw.Over, nil)
 			frames[frameIndex] = resizedImage
-			fmt.Print("\033[J\033[HScaling", frameIndex, "/", frameCount)
+			fmt.Print("\033[J\033[HScaling ", frameIndex, "/", frameCount)
 		}
 
 		//Slice with the ASCII representation for a frame. Each frame is stored as a string with escape sequences for color and newlines
@@ -103,7 +104,7 @@ var rootCmd = &cobra.Command{
 				
 			}
 			asciiList[frameIndex] = ansiBuilder.String()
-			fmt.Print("\033[J\033[HPixels", frameIndex, "/", frameCount)
+			fmt.Print("\033[J\033[HPixels ", frameIndex, "/", frameCount)
 		}
 
 		fmt.Printf("\033[2J\033[H")
@@ -147,11 +148,10 @@ func Execute() {
 	}
 }
 
-//Return an io.Reader containing frame# frameNum
-func ReadFrameAsJpeg(inFileName string, frameNum int, reader *bytes.Buffer) {
+//Set the passed in byte.Buffer to a byte string containing the jpeg data for every frame
+func ReadFramesAsJpeg(inFileName string, frameCount int, reader *bytes.Buffer) {
 	err := ffmpeg.Input(inFileName).
-		Filter("select", ffmpeg.Args{fmt.Sprintf("gte(n,%d)", frameNum)}).
-		Output("pipe:", ffmpeg.KwArgs{"loglevel":"quiet", "vframes": 1, "format": "image2", "vcodec": "mjpeg"}).
+		Output("pipe:", ffmpeg.KwArgs{"loglevel": "quiet", "vframes": frameCount, "update": 1, "format": "image2", "vcodec": "mjpeg"}).
 		WithOutput(reader, os.Stdout).
 		Silent(true).
 		Run()
