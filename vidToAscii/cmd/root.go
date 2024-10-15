@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -41,8 +42,10 @@ var rootCmd = &cobra.Command{
 
 		filename := input
 		
-		//Get the size and total frames of the input video
-		originalWidth, originalHeight, frameCount, duration := GetVideoInfo(filename)
+		var expectedFrametime time.Duration
+		var frameCount int
+		var originalHeight int
+		var originalWidth int
 
 		var asciiList []string
 		var saveOut *os.File
@@ -52,10 +55,21 @@ var rootCmd = &cobra.Command{
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
+			//Get the size and total frames of the input video
+			originalWidth, originalHeight, frameCount, expectedFrametime = GetVideoInfo(filename)
+
+			//The first 8 bytes are reserved to store the expectedFrametime
+			err = binary.Write(saveOut, binary.LittleEndian, expectedFrametime.Nanoseconds())
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
 			Convert(originalWidth,originalHeight,frameCount,filename,saveOut)
 			saveOut.Close()
 			return
 		}else if !load{
+			//Get the size and total frames of the input video
+			originalWidth, originalHeight, frameCount, expectedFrametime = GetVideoInfo(filename)
 			asciiList = Convert(originalWidth,originalHeight,frameCount,filename,saveOut)
 		}
 		
@@ -65,11 +79,15 @@ var rootCmd = &cobra.Command{
 					fmt.Fprintln(os.Stderr, err)
 					os.Exit(1)
 			}
-			asciiList = strings.SplitAfter(string(saveIn), "\033[0m")
+			expectedFrametime = time.Duration(binary.LittleEndian.Uint64(saveIn[0:8]))
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			asciiList = strings.SplitAfter(string(saveIn[8:]), "\033[0m")
 		}
 		
 		fmt.Printf("\033[2J\033[H")
-		expectedFrametime := time.Duration((duration / float32(frameCount))* 1000000000)  * time.Nanosecond
 		totalDroppedFrames := 0
 		dropFrame := false
 		startTime := time.Now()
@@ -113,8 +131,8 @@ func ReadFramesAsJpeg(inFileName string, frameCount int, reader *bytes.Buffer) {
 	}
 }
 
-//Return width, height, total frames, and duration of video
-func GetVideoInfo(inFileName string) (int, int, int, float32) {
+//Return width, height, total frames, and expectedFrametime
+func GetVideoInfo(inFileName string) (int, int, int, time.Duration) {
 	data, err := ffmpeg.Probe(inFileName)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -160,7 +178,9 @@ func GetVideoInfo(inFileName string) (int, int, int, float32) {
 		frames = int(framerate * duration)
 	}
 	
-	return vInfo.Streams[0].Width, vInfo.Streams[0].Height, frames, float32(duration)
+	expectedFrametime := time.Duration((duration / float64(frames))* 1000000000)  * time.Nanosecond
+
+	return vInfo.Streams[0].Width, vInfo.Streams[0].Height, frames, expectedFrametime
 }
 
 func Convert(originalWidth int, originalHeight int, frameCount int, filename string, saveOut *os.File) []string{
