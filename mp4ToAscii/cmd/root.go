@@ -108,7 +108,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		fmt.Printf("\033[2J\033[H")
-		frametime := time.Duration((duration / float32(frameCount))* 1000)  * time.Millisecond
+		expectedFrametime := time.Duration((duration / float32(frameCount))* 1000)  * time.Millisecond
 		totalDroppedFrames := 0
 		dropFrame := false
 		startTime := time.Now()
@@ -120,7 +120,7 @@ var rootCmd = &cobra.Command{
 				totalDroppedFrames++
 				continue
 			}
-			expectedTime := time.Duration((frameIndex + 1) * int(frametime))
+			expectedTime := time.Duration((frameIndex + 1) * int(expectedFrametime))
 			print("\033[H",frame)
 			if expectedTime - time.Since(startTime) < 0{
 				dropFrame = true
