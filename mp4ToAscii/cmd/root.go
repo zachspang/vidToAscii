@@ -19,96 +19,48 @@ import (
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
+var save bool
+var load bool
+func init() {
+	rootCmd.PersistentFlags().BoolVarP(&save, "save", "s", false, "save the converted data as a txt that can be loaded with --load")
+	rootCmd.PersistentFlags().BoolVarP(&load, "load", "l", false, "load saved data created by --save")
+}
+
 var rootCmd = &cobra.Command{
+	Use: "mp4ToAscii",
+	Short: "Convert a mp4 into ascii and play it in the terminal",
 	Run: func(cmd *cobra.Command, args []string) {
-		filename := "..\\inputComplex.mp4"
+		filename := "..\\inputComplexShort.mp4"
 		
-		//Get the size of the terminal
-		termWidth, termHeight, err := term.GetSize(int(os.Stdout.Fd()))
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
 		//Get the size and total frames of the input video
 		originalWidth, originalHeight, frameCount, duration := GetVideoInfo(filename)
 
-		//Set the new width and height based on the terminal size
-		newWidth := termWidth / 2
-		newHeight := (int((float32(newWidth) / float32(originalWidth)) * float32(originalHeight)))
-		if newHeight > termHeight{
-			newHeight = termHeight
-			newWidth = (int((float32(newHeight) / float32(originalHeight)) * float32(originalWidth)))
-		}
-		// fmt.Println("TW", termWidth, "TH", termHeight)
-		// fmt.Println("NW", newWidth, "NH", newHeight)
-		frames := make([]image.Image, frameCount) 
-
-		//Read all frames as a single byte string
-		reader := bytes.NewBuffer(nil)
-		ReadFramesAsJpeg(filename, frameCount, reader)
-		//All jpegs end in an EOI marker, 0xff 0xd9. Split the byte string into seperate byte strings for each frame
-		framesAsBytes := bytes.SplitAfter(reader.Bytes(), []byte{0xff, 0xd9})
-		
-		//Decode each frame's byte string into an image.Image
-		for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
-			frame, err := jpeg.Decode(bytes.NewReader(framesAsBytes[frameIndex]))
+		var asciiList []string
+		var saveOut *os.File
+		if save{
+			saveOut, err := os.Create("..\\save.txt")
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
-			frames[frameIndex] = frame
-			fmt.Print("\033[J\033[HDecoding ", frameIndex, "/", frameCount)
+			Convert(originalWidth,originalHeight,frameCount,filename,saveOut)
+			saveOut.Close()
+			return
+		}else if !load{
+			asciiList = Convert(originalWidth,originalHeight,frameCount,filename,saveOut)
 		}
-
-		//For each frame make a blank image of the new size and then draw over it
-		for frameIndex, frame := range frames{
-			resizedImage:= image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
-			//Add flag for different quality options https://pkg.go.dev/golang.org/x/image/draw#pkg-variables
-			draw.BiLinear.Scale(resizedImage, resizedImage.Rect, frame, frame.Bounds(), draw.Over, nil)
-			frames[frameIndex] = resizedImage
-			fmt.Print("\033[J\033[HScaling ", frameIndex, "/", frameCount)
-		}
-
-		//Slice with the ASCII representation for a frame. Each frame is stored as a string with escape sequences for color and newlines
-		asciiList := make([]string, frameCount)
-
-		var charSet []string
-		//eventually add flag to swap between these
-		if true{
-			charSet = strings.Split(" .:=+*#%@", "")
-		}else{
-			charSet = strings.Split("░▒▓█", "")
-		}
-
-		//For each pixel in each frame get the relative luminance in a range of 0-255, select a char based on that, and set an ANSI color
-		for frameIndex, frame := range frames{
-			var ansiBuilder strings.Builder
-			for y := range newHeight{
-				for x := range newWidth{
-					R,G,B,_ := frame.At(x,y).RGBA()
-					red := uint8(R>>8)
-					green := uint8(G>>8)
-					blue := uint8(B>>8)
-					relativeLuminance := (0.2126 * float64(red)) + (0.715 * float64(green)) + (0.0722 * float64(blue))
-					ansiBuilder.WriteString("\x1b[38;2;" + strconv.FormatUint(uint64(red), 10) + ";" + strconv.FormatUint(uint64(green), 10) + ";" + strconv.FormatUint(uint64(blue), 10) + "m") 
-					
-					charIndex := int(math.Round(relativeLuminance / (255 / float64(len(charSet) - 1)))) 
-					ansiBuilder.WriteString(charSet[charIndex] + charSet[charIndex]) 
-					
-				}
-				if y == newHeight - 1{
-					ansiBuilder.WriteString("\033[0m")
-				}else{
-					ansiBuilder.WriteString("\n")
-				}
-				
+		
+		if load{
+			saveIn,err := os.ReadFile("..\\save.txt")
+			if err != nil {
+					fmt.Fprintln(os.Stderr, err)
+					os.Exit(1)
 			}
-			asciiList[frameIndex] = ansiBuilder.String()
-			fmt.Print("\033[J\033[HPixels ", frameIndex, "/", frameCount)
+			asciiList = strings.SplitAfter(string(saveIn), "\033[0m")
 		}
-
+		
 		fmt.Printf("\033[2J\033[H")
-		expectedFrametime := time.Duration((duration / float32(frameCount))* 1000)  * time.Millisecond
+		expectedFrametime := time.Duration((duration / float32(frameCount))* 1000000000)  * time.Nanosecond
 		totalDroppedFrames := 0
 		dropFrame := false
 		startTime := time.Now()
@@ -121,7 +73,7 @@ var rootCmd = &cobra.Command{
 				continue
 			}
 			expectedTime := time.Duration((frameIndex + 1) * int(expectedFrametime))
-			print("\033[H",frame)
+			print(frame)
 			if expectedTime - time.Since(startTime) < 0{
 				dropFrame = true
 			}
@@ -129,15 +81,6 @@ var rootCmd = &cobra.Command{
 		}
 		fmt.Printf("\033[J")
 		print("\nTotal Dropped Frames ", totalDroppedFrames)
-		//Print the frame
-		// fmt.Println(asciiList[0])
-		// fmt.Println("\033[0m")
-		// //DELETE LATER. Save the first frame for testing purposes
-		// 	img, _ := jpeg.Decode(ReadFrameAsJpeg(filename, 0))
-		// 	file, _ := os.Create("..\\output.jpeg")
-		// 	_ = jpeg.Encode(file, img, &jpeg.Options{Quality: 100})
-		// 	file, _ = os.Create("..\\output2.jpeg")
-		// 	_ = jpeg.Encode(file, frames[0], &jpeg.Options{Quality: 100})
 	},
 }
   
@@ -197,4 +140,96 @@ func GetVideoInfo(inFileName string) (int, int, int, float32) {
 	}
 	
 	return vInfo.Streams[0].Width, vInfo.Streams[0].Height, frames, float32(duration)
+}
+
+func Convert(originalWidth int, originalHeight int, frameCount int, filename string, saveOut *os.File) []string{
+	//Get the size of the terminal
+	termWidth, termHeight, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	//Set the new width and height based on the terminal size
+	newWidth := termWidth / 2
+	newHeight := (int((float32(newWidth) / float32(originalWidth)) * float32(originalHeight)))
+	if newHeight > termHeight{
+		newHeight = termHeight
+		newWidth = (int((float32(newHeight) / float32(originalHeight)) * float32(originalWidth)))
+	}
+	// fmt.Println("TW", termWidth, "TH", termHeight)
+	// fmt.Println("NW", newWidth, "NH", newHeight)
+
+	frames := make([]image.Image, frameCount) 
+
+	//Read all frames as a single byte string
+	reader := bytes.NewBuffer(nil)
+	ReadFramesAsJpeg(filename, frameCount, reader)
+	//All jpegs end in an EOI marker, 0xff 0xd9. Split the byte string into seperate byte strings for each frame
+	framesAsBytes := bytes.SplitAfter(reader.Bytes(), []byte{0xff, 0xd9})
+	
+	//Decode each frame's byte string into an image.Image
+	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
+		frame, err := jpeg.Decode(bytes.NewReader(framesAsBytes[frameIndex]))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		frames[frameIndex] = frame
+		fmt.Print("\033[J\033[HDecoding ", frameIndex + 1, "/", frameCount)
+	}
+
+	//For each frame make a blank image of the new size and then draw over it
+	for frameIndex, frame := range frames{
+		resizedImage:= image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
+		//Add flag for different quality options https://pkg.go.dev/golang.org/x/image/draw#pkg-variables
+		draw.BiLinear.Scale(resizedImage, resizedImage.Rect, frame, frame.Bounds(), draw.Over, nil)
+		frames[frameIndex] = resizedImage
+		fmt.Print("\033[J\033[HScaling ", frameIndex + 1, "/", frameCount)
+	}
+
+	//Slice with the ASCII representation for a frame. Each frame is stored as a string with escape sequences for color and newlines
+	asciiList := make([]string, frameCount)
+
+	var charSet []string
+	//eventually add flag to swap between these
+	if true{
+		charSet = strings.Split(" .:=+*#%@", "")
+	}else{
+		charSet = strings.Split("░▒▓█", "")
+	}
+
+	//For each pixel in each frame get the relative luminance in a range of 0-255, select a char based on that, and set an ANSI color
+	for frameIndex, frame := range frames{
+		var ansiBuilder strings.Builder
+		ansiBuilder.WriteString("\033[H")
+		for y := range newHeight{
+			for x := range newWidth{
+				R,G,B,_ := frame.At(x,y).RGBA()
+				red := uint8(R>>8)
+				green := uint8(G>>8)
+				blue := uint8(B>>8)
+				relativeLuminance := (0.2126 * float64(red)) + (0.715 * float64(green)) + (0.0722 * float64(blue))
+				ansiBuilder.WriteString("\x1b[38;2;" + strconv.FormatUint(uint64(red), 10) + ";" + strconv.FormatUint(uint64(green), 10) + ";" + strconv.FormatUint(uint64(blue), 10) + "m") 
+				
+				charIndex := int(math.Round(relativeLuminance / (255 / float64(len(charSet) - 1)))) 
+				ansiBuilder.WriteString(charSet[charIndex] + charSet[charIndex]) 
+				
+			}
+			if y == newHeight - 1{
+				ansiBuilder.WriteString("\033[0m")
+			}else{
+				ansiBuilder.WriteString("\n")
+			}
+			
+		}
+		
+		if save{
+			fmt.Fprint(saveOut, ansiBuilder.String())
+		} else{
+			asciiList[frameIndex] = ansiBuilder.String()
+		}
+		fmt.Print("\033[J\033[HPixels ", frameIndex + 1, "/", frameCount)
+	}
+	return asciiList
 }

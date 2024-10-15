@@ -27,3 +27,4 @@ go.work.sum
 #Test videos and frames
 *.mp4
 *.jpeg
+*.txt
