@@ -7,7 +7,7 @@ A CLI application to convert a video or gif into ASCII and play it in a terminal
 
 2. Download or clone repository
 
-3. Navigate to the vidToAscii folder within the repository'
+3. Navigate to the vidToAscii folder within the repository
 
 4. Intstall the application
 ```

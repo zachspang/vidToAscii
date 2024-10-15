@@ -47,7 +47,7 @@ var rootCmd = &cobra.Command{
 		var asciiList []string
 		var saveOut *os.File
 		if save{
-			saveOut, err := os.Create("..\\save.txt")
+			saveOut, err := os.Create("save.txt")
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
@@ -60,7 +60,7 @@ var rootCmd = &cobra.Command{
 		}
 		
 		if load{
-			saveIn,err := os.ReadFile("..\\save.txt")
+			saveIn,err := os.ReadFile(filename)
 			if err != nil {
 					fmt.Fprintln(os.Stderr, err)
 					os.Exit(1)
