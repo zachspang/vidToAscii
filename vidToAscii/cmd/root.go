@@ -30,8 +30,8 @@ func init() {
 }
 
 var rootCmd = &cobra.Command{
-	Use: "mp4ToAscii",
-	Short: "Convert a mp4 into ascii and play it in the terminal",
+	Use: "vidToAscii",
+	Short: "Convert a video into ascii and play it in the terminal",
 	Run: func(cmd *cobra.Command, args []string) {
 		_, err := os.Stat(input)
 		if err != nil {

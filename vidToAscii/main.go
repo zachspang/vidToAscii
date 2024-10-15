@@ -1,7 +1,7 @@
 package main
 
 import (
-  "github.com/zachspang/mp4ToAscii/mp4ToAscii/cmd"
+	"github.com/zachspang/vidToAscii/vidToAscii/cmd"
 )
 
 func main() {

@@ -1,4 +1,4 @@
-module github.com/zachspang/mp4ToAscii
+module github.com/zachspang/vidToAscii
 
 go 1.23.2
 
