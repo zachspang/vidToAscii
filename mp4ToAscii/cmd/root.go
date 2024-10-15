@@ -21,16 +21,25 @@ import (
 
 var save bool
 var load bool
+var input string
 func init() {
 	rootCmd.PersistentFlags().BoolVarP(&save, "save", "s", false, "save the converted data as a txt that can be loaded with --load")
 	rootCmd.PersistentFlags().BoolVarP(&load, "load", "l", false, "load saved data created by --save")
+	rootCmd.Flags().StringVarP(&input, "input", "i", "", "file path of input video")
+	rootCmd.MarkFlagRequired("input")
 }
 
 var rootCmd = &cobra.Command{
 	Use: "mp4ToAscii",
 	Short: "Convert a mp4 into ascii and play it in the terminal",
 	Run: func(cmd *cobra.Command, args []string) {
-		filename := "..\\inputComplexShort.mp4"
+		_, err := os.Stat(input)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		
+		filename := input
 		
 		//Get the size and total frames of the input video
 		originalWidth, originalHeight, frameCount, duration := GetVideoInfo(filename)
@@ -221,7 +230,6 @@ func Convert(originalWidth int, originalHeight int, frameCount int, filename str
 			}else{
 				ansiBuilder.WriteString("\n")
 			}
-			
 		}
 		
 		if save{
