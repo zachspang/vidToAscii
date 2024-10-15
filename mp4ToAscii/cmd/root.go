@@ -38,7 +38,7 @@ var rootCmd = &cobra.Command{
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		
+
 		filename := input
 		
 		//Get the size and total frames of the input video
@@ -108,7 +108,8 @@ func ReadFramesAsJpeg(inFileName string, frameCount int, reader *bytes.Buffer) {
 		Silent(true).
 		Run()
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 }
 
@@ -116,7 +117,8 @@ func ReadFramesAsJpeg(inFileName string, frameCount int, reader *bytes.Buffer) {
 func GetVideoInfo(inFileName string) (int, int, int, float32) {
 	data, err := ffmpeg.Probe(inFileName)
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 
 	type VideoInfo struct {
@@ -131,19 +133,22 @@ func GetVideoInfo(inFileName string) (int, int, int, float32) {
 	vInfo := &VideoInfo{}
 	err = json.Unmarshal([]byte(data), vInfo)
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 
 	duration,err := strconv.ParseFloat(vInfo.Streams[0].Duration,32)
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 
 	frames,err := strconv.Atoi(vInfo.Streams[0].Frames)
 	if err != nil {
 		framerate,err := strconv.ParseFloat(strings.Split(vInfo.Streams[0].Framerate, "/")[0],32)
 		if err != nil {
-			panic(err)
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
 		frames = int(framerate * duration)
 	}
