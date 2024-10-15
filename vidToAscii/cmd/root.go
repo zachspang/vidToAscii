@@ -145,11 +145,18 @@ func GetVideoInfo(inFileName string) (int, int, int, float32) {
 
 	frames,err := strconv.Atoi(vInfo.Streams[0].Frames)
 	if err != nil {
-		framerate,err := strconv.ParseFloat(strings.Split(vInfo.Streams[0].Framerate, "/")[0],32)
+		framerateString := strings.Split(vInfo.Streams[0].Framerate, "/")
+		framerateNumerator,err := strconv.ParseFloat(framerateString[0],32)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+		framerateDenomonator, err := strconv.ParseFloat(framerateString[1],32)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		framerate := framerateNumerator / framerateDenomonator
 		frames = int(framerate * duration)
 	}
 	
