@@ -28,3 +28,6 @@ go.work.sum
 *.mp4
 *.jpeg
 *.txt
+
+#IDE config
+.vscode

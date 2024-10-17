@@ -216,17 +216,12 @@ func Convert(originalWidth int, originalHeight int, frameCount int, filename str
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		frames[frameIndex] = frame
-		fmt.Print("\033[J\033[HDecoding ", frameIndex + 1, "/", frameCount)
-	}
-
-	//For each frame make a blank image of the new size and then draw over it
-	for frameIndex, frame := range frames{
+		//For each frame make a blank image of the new size and then draw over it
 		resizedImage:= image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
-		//Add flag for different quality options https://pkg.go.dev/golang.org/x/image/draw#pkg-variables
+		//TODO: Add flag for different quality options https://pkg.go.dev/golang.org/x/image/draw#pkg-variables
 		draw.BiLinear.Scale(resizedImage, resizedImage.Rect, frame, frame.Bounds(), draw.Over, nil)
 		frames[frameIndex] = resizedImage
-		fmt.Print("\033[J\033[HScaling ", frameIndex + 1, "/", frameCount)
+		fmt.Print("\033[J\033[HDecoding ", frameIndex + 1, "/", frameCount)
 	}
 
 	//Slice with the ASCII representation for a frame. Each frame is stored as a string with escape sequences for color and newlines
@@ -269,7 +264,7 @@ func Convert(originalWidth int, originalHeight int, frameCount int, filename str
 		} else{
 			asciiList[frameIndex] = ansiBuilder.String()
 		}
-		fmt.Print("\033[J\033[HPixels ", frameIndex + 1, "/", frameCount)
+		fmt.Print("\033[J\033[HChoosing ASCII representation for Pixels ", frameIndex + 1, "/", frameCount)
 	}
 	return asciiList
 }
