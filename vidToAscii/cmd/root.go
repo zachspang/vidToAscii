@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/image/draw"
 	"golang.org/x/term"
 
 	"github.com/spf13/cobra"
@@ -119,9 +118,10 @@ func Execute() {
 }
 
 //Set the passed in byte.Buffer to a byte string containing the jpeg data for every frame
-func ReadFramesAsJpeg(inFileName string, frameCount int, reader *bytes.Buffer) {
+func ReadFramesAsJpeg(inFileName string, frameCount int, newWidth int, newHeight int, reader *bytes.Buffer) {
+	println("Waiting on FFMPEG to split video into frames")
 	err := ffmpeg.Input(inFileName).
-		Output("pipe:", ffmpeg.KwArgs{"loglevel": "quiet", "vframes": frameCount, "update": 1, "format": "image2", "vcodec": "mjpeg"}).
+		Output("pipe:", ffmpeg.KwArgs{"loglevel": "quiet", "vframes": frameCount, "update": 1, "q":"1", "qmin": 1, "qmax": 1, "vf":"scale=w=" + strconv.Itoa(newWidth) + ":h=" + strconv.Itoa(newHeight) +":flags=lanczos" ,"format": "image2", "vcodec": "mjpeg"}).
 		WithOutput(reader, os.Stdout).
 		Silent(true).
 		Run()
@@ -205,7 +205,7 @@ func Convert(originalWidth int, originalHeight int, frameCount int, filename str
 
 	//Read all frames as a single byte string
 	reader := bytes.NewBuffer(nil)
-	ReadFramesAsJpeg(filename, frameCount, reader)
+	ReadFramesAsJpeg(filename, frameCount, newWidth, newHeight, reader)
 	//All jpegs end in an EOI marker, 0xff 0xd9. Split the byte string into seperate byte strings for each frame
 	framesAsBytes := bytes.SplitAfter(reader.Bytes(), []byte{0xff, 0xd9})
 	
@@ -216,11 +216,7 @@ func Convert(originalWidth int, originalHeight int, frameCount int, filename str
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		//For each frame make a blank image of the new size and then draw over it
-		resizedImage:= image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
-		//TODO: Add flag for different quality options https://pkg.go.dev/golang.org/x/image/draw#pkg-variables
-		draw.BiLinear.Scale(resizedImage, resizedImage.Rect, frame, frame.Bounds(), draw.Over, nil)
-		frames[frameIndex] = resizedImage
+		frames[frameIndex] = frame
 		fmt.Print("\033[J\033[HDecoding ", frameIndex + 1, "/", frameCount)
 	}
 
@@ -264,7 +260,7 @@ func Convert(originalWidth int, originalHeight int, frameCount int, filename str
 		} else{
 			asciiList[frameIndex] = ansiBuilder.String()
 		}
-		fmt.Print("\033[J\033[HChoosing ASCII representation for Pixels ", frameIndex + 1, "/", frameCount)
+		fmt.Print("\033[J\033[HChoosing ASCII representation for pixels ", frameIndex + 1, "/", frameCount)
 	}
 	return asciiList
 }
