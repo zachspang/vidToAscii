@@ -22,11 +22,13 @@ import (
 var save bool
 var load bool
 var input string
+var background bool
 func init() {
 	rootCmd.PersistentFlags().BoolVarP(&save, "save", "s", false, "save the converted data as a txt that can be loaded with --load")
 	rootCmd.PersistentFlags().BoolVarP(&load, "load", "l", false, "load saved data created by --save")
 	rootCmd.Flags().StringVarP(&input, "input", "i", "", "file path of input video")
 	rootCmd.MarkFlagRequired("input")
+	rootCmd.PersistentFlags().BoolVarP(&background, "background", "b", false, "use background colors instead of ascii characters. This makes the video look like pixel art")
 }
 
 var rootCmd = &cobra.Command{
@@ -225,10 +227,10 @@ func Convert(originalWidth int, originalHeight int, frameCount int, filename str
 
 	var charSet []string
 	//eventually add flag to swap between these
-	if true{
-		charSet = strings.Split(" .:=+*#%@", "")
+	if background{
+		charSet = []string{" "}
 	}else{
-		charSet = strings.Split("░▒▓█", "")
+		charSet = strings.Split(" .:=+*#%@", "")
 	}
 
 	//For each pixel in each frame get the relative luminance in a range of 0-255, select a char based on that, and set an ANSI color
@@ -242,8 +244,11 @@ func Convert(originalWidth int, originalHeight int, frameCount int, filename str
 				green := uint8(G>>8)
 				blue := uint8(B>>8)
 				relativeLuminance := (0.2126 * float64(red)) + (0.715 * float64(green)) + (0.0722 * float64(blue))
-				ansiBuilder.WriteString("\x1b[38;2;" + strconv.FormatUint(uint64(red), 10) + ";" + strconv.FormatUint(uint64(green), 10) + ";" + strconv.FormatUint(uint64(blue), 10) + "m") 
-				
+				if background{
+					ansiBuilder.WriteString("\x1b[48;2;" + strconv.FormatUint(uint64(red), 10) + ";" + strconv.FormatUint(uint64(green), 10) + ";" + strconv.FormatUint(uint64(blue), 10) + "m") 
+				} else{
+					ansiBuilder.WriteString("\x1b[38;2;" + strconv.FormatUint(uint64(red), 10) + ";" + strconv.FormatUint(uint64(green), 10) + ";" + strconv.FormatUint(uint64(blue), 10) + "m") 
+				}
 				charIndex := int(math.Round(relativeLuminance / (255 / float64(len(charSet) - 1)))) 
 				ansiBuilder.WriteString(charSet[charIndex] + charSet[charIndex]) 
 				
