@@ -9,7 +9,8 @@ A CLI application to convert a video or gif into ASCII and play it in a terminal
 
 3. Navigate to the vidToAscii folder within the repository
 
-4. Intstall the application
+4. Intstall the application.
+   This will create an executable. On Windows it will also add the executable to the PATH variable.
 ```
 go install
 ```
