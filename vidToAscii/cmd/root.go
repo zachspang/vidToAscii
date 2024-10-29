@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"image"
 	"image/jpeg"
 	"math"
 	"os"
@@ -46,8 +45,6 @@ var rootCmd = &cobra.Command{
 		var frameCount int
 		var originalHeight int
 		var originalWidth int
-
-		var asciiList []string
 		var saveOut *os.File
 
 		if save{
@@ -65,50 +62,18 @@ var rootCmd = &cobra.Command{
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
-			Convert(originalWidth,originalHeight,frameCount,filename,saveOut)
+			Convert(originalWidth,originalHeight,frameCount,filename,expectedFrametime,saveOut)
 			saveOut.Close()
 			return
 		}else if !load{
 			//Get the size and total frames of the input video
 			originalWidth, originalHeight, frameCount, expectedFrametime = GetVideoInfo(filename)
-			asciiList = Convert(originalWidth,originalHeight,frameCount,filename,saveOut)
+			Convert(originalWidth,originalHeight,frameCount,filename,expectedFrametime,saveOut)
 		}
 		
 		if load{
-			saveIn,err := os.ReadFile(filename)
-			if err != nil {
-					fmt.Fprintln(os.Stderr, err)
-					os.Exit(1)
-			}
-			expectedFrametime = time.Duration(binary.LittleEndian.Uint64(saveIn[0:8]))
-			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				os.Exit(1)
-			}
-			asciiList = strings.SplitAfter(string(saveIn[8:]), "\033[0m")
+			loadSave(filename)
 		}
-		
-		fmt.Printf("\033[2J\033[H")
-		totalDroppedFrames := 0
-		dropFrame := false
-		startTime := time.Now()
-		//This loop will print one frame then sleep until the next frame is meant to be shown
-		//If it can't keep up it will drop the next frame
-		for frameIndex, frame := range asciiList{
-			if dropFrame{
-				dropFrame = false
-				totalDroppedFrames++
-				continue
-			}
-			expectedTime := time.Duration((frameIndex + 1) * int(expectedFrametime))
-			print(frame)
-			if expectedTime - time.Since(startTime) < 0{
-				dropFrame = true
-			}
-			time.Sleep(expectedTime - time.Since(startTime))
-		}
-		fmt.Printf("\033[J")
-		print("\nTotal Dropped Frames ", totalDroppedFrames)
 	},
 }
   
@@ -185,7 +150,16 @@ func GetVideoInfo(inFileName string) (int, int, int, time.Duration) {
 	return vInfo.Streams[0].Width, vInfo.Streams[0].Height, frames, expectedFrametime
 }
 
-func Convert(originalWidth int, originalHeight int, frameCount int, filename string, saveOut *os.File) []string{
+func Convert(originalWidth int, originalHeight int, frameCount int, filename string, expectedFrametime time.Duration, saveOut *os.File) {
+
+	//Define the set of characters to represent different luminosity pixels
+	var charSet []string
+	if background{
+		charSet = []string{" "}
+	}else{
+		charSet = strings.Split(" .:=+*#%@", "")
+	}
+
 	//Get the size of the terminal
 	termWidth, termHeight, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
@@ -201,37 +175,26 @@ func Convert(originalWidth int, originalHeight int, frameCount int, filename str
 		newWidth = (int((float32(newHeight) / float32(originalHeight)) * float32(originalWidth)))
 	}
 
-	frames := make([]image.Image, frameCount) 
-
 	//Read all frames as bytes
 	reader := bytes.NewBuffer(nil)
 	ReadFramesAsJpeg(filename, frameCount, newWidth, newHeight, reader)
 	//All jpegs end in an EOI marker, 0xff 0xd9. Split the byte string into seperate byte strings for each frame
 	framesAsBytes := bytes.SplitAfter(reader.Bytes(), []byte{0xff, 0xd9})
 	
-	//Decode each frame into an image.Image
+	totalDroppedFrames := 0
+	dropFrame := false
+	startTime := time.Now()
+	fmt.Printf("\033[2J\033[H")
+
+	//Decode each frame and print it
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		frame, err := jpeg.Decode(bytes.NewReader(framesAsBytes[frameIndex]))
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		frames[frameIndex] = frame
-		fmt.Print("\033[J\033[HDecoding ", frameIndex + 1, "/", frameCount)
-	}
-
-	//Slice with the ASCII representation for a frame. Each frame is stored as a string with escape sequences for color and newlines to seperate rows
-	asciiList := make([]string, frameCount)
-
-	var charSet []string
-	if background{
-		charSet = []string{" "}
-	}else{
-		charSet = strings.Split(" .:=+*#%@", "")
-	}
-
-	//For each pixel in each frame get the relative luminance in a range of 0-255, select a char based on that, and set an ANSI color
-	for frameIndex, frame := range frames{
+		
+		//Loop through all the pixels of the frame and turn it into a string
 		var ansiBuilder strings.Builder
 		ansiBuilder.WriteString("\033[H")
 		for y := range newHeight{
@@ -248,7 +211,6 @@ func Convert(originalWidth int, originalHeight int, frameCount int, filename str
 				}
 				charIndex := int(math.Round(relativeLuminance / (255 / float64(len(charSet) - 1)))) 
 				ansiBuilder.WriteString(charSet[charIndex] + charSet[charIndex]) 
-				
 			}
 			if y == newHeight - 1{
 				ansiBuilder.WriteString("\033[0m")
@@ -256,13 +218,64 @@ func Convert(originalWidth int, originalHeight int, frameCount int, filename str
 				ansiBuilder.WriteString("\n")
 			}
 		}
-		
+
 		if save{
 			fmt.Fprint(saveOut, ansiBuilder.String())
 		} else{
-			asciiList[frameIndex] = ansiBuilder.String()
+			//Print one frame then sleep until the next frame is meant to be shown
+			//If it can't keep up it will drop the next frame
+			if dropFrame{
+				dropFrame = false
+				totalDroppedFrames++
+				
+			}else {
+				expectedTime := time.Duration((frameIndex + 1) * int(expectedFrametime))
+				print(ansiBuilder.String())
+				if expectedTime - time.Since(startTime) < 0{
+					dropFrame = true
+				}
+				time.Sleep(expectedTime - time.Since(startTime))
+			}
 		}
-		fmt.Print("\033[J\033[HChoosing ASCII representation for pixels ", frameIndex + 1, "/", frameCount)
 	}
-	return asciiList
+	if !save{
+		fmt.Printf("\033[J")
+		print("\nTotal Dropped Frames ", totalDroppedFrames)	
+	}
+}
+
+func loadSave(filename string){
+	saveIn,err := os.ReadFile(filename)
+	if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+	}
+	expectedFrametime := time.Duration(binary.LittleEndian.Uint64(saveIn[0:8]))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	asciiList := strings.SplitAfter(string(saveIn[8:]), "\033[0m")
+
+	fmt.Printf("\033[2J\033[H")
+	totalDroppedFrames := 0
+	dropFrame := false
+	startTime := time.Now()
+	//This loop will print one frame then sleep until the next frame is meant to be shown
+	//If it can't keep up it will drop the next frame
+	for frameIndex, frame := range asciiList{
+		if dropFrame{
+			dropFrame = false
+			totalDroppedFrames++
+			continue
+		}
+		expectedTime := time.Duration((frameIndex + 1) * int(expectedFrametime))
+		print(frame)
+		if expectedTime - time.Since(startTime) < 0{
+			dropFrame = true
+		}
+		time.Sleep(expectedTime - time.Since(startTime))
+	}
+	fmt.Printf("\033[J")
+	print("\nTotal Dropped Frames ", totalDroppedFrames)
 }
