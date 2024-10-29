@@ -42,7 +42,6 @@ var rootCmd = &cobra.Command{
 		}
 
 		filename := input
-		
 		var expectedFrametime time.Duration
 		var frameCount int
 		var originalHeight int
@@ -50,6 +49,7 @@ var rootCmd = &cobra.Command{
 
 		var asciiList []string
 		var saveOut *os.File
+
 		if save{
 			saveOut, err := os.Create("save.txt")
 			if err != nil {
@@ -119,7 +119,7 @@ func Execute() {
 	}
 }
 
-//Set the passed in byte.Buffer to a byte string containing the jpeg data for every frame
+//Set the passed in byte.Buffer to a byte string containing the jpeg data for every frame scaled to the size of the terminal
 func ReadFramesAsJpeg(inFileName string, frameCount int, newWidth int, newHeight int, reader *bytes.Buffer) {
 	println("Waiting on FFMPEG to split video into frames")
 	err := ffmpeg.Input(inFileName).
@@ -200,18 +200,16 @@ func Convert(originalWidth int, originalHeight int, frameCount int, filename str
 		newHeight = termHeight
 		newWidth = (int((float32(newHeight) / float32(originalHeight)) * float32(originalWidth)))
 	}
-	// fmt.Println("TW", termWidth, "TH", termHeight)
-	// fmt.Println("NW", newWidth, "NH", newHeight)
 
 	frames := make([]image.Image, frameCount) 
 
-	//Read all frames as a single byte string
+	//Read all frames as bytes
 	reader := bytes.NewBuffer(nil)
 	ReadFramesAsJpeg(filename, frameCount, newWidth, newHeight, reader)
 	//All jpegs end in an EOI marker, 0xff 0xd9. Split the byte string into seperate byte strings for each frame
 	framesAsBytes := bytes.SplitAfter(reader.Bytes(), []byte{0xff, 0xd9})
 	
-	//Decode each frame's byte string into an image.Image
+	//Decode each frame into an image.Image
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		frame, err := jpeg.Decode(bytes.NewReader(framesAsBytes[frameIndex]))
 		if err != nil {
@@ -222,11 +220,10 @@ func Convert(originalWidth int, originalHeight int, frameCount int, filename str
 		fmt.Print("\033[J\033[HDecoding ", frameIndex + 1, "/", frameCount)
 	}
 
-	//Slice with the ASCII representation for a frame. Each frame is stored as a string with escape sequences for color and newlines
+	//Slice with the ASCII representation for a frame. Each frame is stored as a string with escape sequences for color and newlines to seperate rows
 	asciiList := make([]string, frameCount)
 
 	var charSet []string
-	//eventually add flag to swap between these
 	if background{
 		charSet = []string{" "}
 	}else{
