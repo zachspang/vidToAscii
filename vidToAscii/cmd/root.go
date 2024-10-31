@@ -24,7 +24,7 @@ var input string
 var background bool
 func init() {
 	rootCmd.PersistentFlags().BoolVarP(&save, "save", "s", false, "save the converted data as a txt that can be loaded with --load")
-	rootCmd.PersistentFlags().BoolVarP(&load, "load", "l", false, "load saved data created by --save")
+	rootCmd.PersistentFlags().BoolVarP(&load, "load", "l", false, "load saved data created by --save. Must use -i to specify filepath of save")
 	rootCmd.Flags().StringVarP(&input, "input", "i", "", "file path of input video")
 	rootCmd.MarkFlagRequired("input")
 	rootCmd.PersistentFlags().BoolVarP(&background, "background", "b", false, "use background colors instead of ascii characters. This makes the video look like pixel art")
